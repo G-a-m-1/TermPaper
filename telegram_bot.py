@@ -14,6 +14,9 @@ from dotenv import load_dotenv
 Ollama_manager.start_ollama()
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
+if BOT_TOKEN == None:
+    print(f"Помилка: BOT_TOKEN не знайдено!")
+    exit()
 
 # Налаштування
 DB_DIR = "./db"
@@ -35,7 +38,7 @@ retriever = vectorstore.as_retriever(search_kwargs={"k": 6})
 # Створюю шаблон промпту
 template = """Ви помічник університету. Відповідайте повно на питання, використовуючи лише наданий контекст. 
 Якщо відповіді немає в контексті, скажіть: "На жаль, я не знайшов цієї інформації в базі даних університету".
-Відповідайте виключно українською мовою.
+Відповідай виключно українською мовою.
 
 Контекст:
 {context}
