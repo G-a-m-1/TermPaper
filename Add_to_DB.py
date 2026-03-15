@@ -1,11 +1,11 @@
 ﻿import os
-import re
-import Ollama_manager
+import ollama_manager
 from concurrent.futures import ThreadPoolExecutor
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
+from pypdf import PdfReader
 
 # Налаштування
 DB_DIR = "./db"
@@ -26,6 +26,14 @@ def process_single_pdf(file_path):
     try:
         loader = PyMuPDFLoader(file_path)
         docs = loader.load()
+        reader = PdfReader(file_path)
+        source_url = (reader.metadata or {}).get("/Source", "")
+
+        # Додаю у metadata кожного документа
+        if source_url:
+            for doc in docs:
+                doc.metadata["source_url"] = source_url
+
         return TEXT_SPLITTER.split_documents(docs)
     except Exception as e:
         print(f"Помилка при читанні {file_path}: {e}")
@@ -34,10 +42,8 @@ def process_single_pdf(file_path):
 def clean_chunks(chunks):
     cleaned = []
     for d in chunks:
-        # Видаляю все, що не є текстом, цифрами, пунктуацією чи кирилицею
-        text = re.sub(r'[^\x20-\x7E\u0400-\u04FF\s]', '', text) 
-        # Нормалізація пробілів та переносів (текст одним рядком)
-        text = " ".join(text.split())
+        # Перебирає кожен символ тексту і залишає його якщо символ є ASCII або символ знаходиться в діапазоні кирилиці
+        text = ''.join(c for c in d.page_content if (c.isascii() and c >= ' ') or '\u0400' <= c <= '\u04FF')
         # Перевірка на мінімальну довжину
         if len(text.strip()) < 30:
             continue            
@@ -84,10 +90,10 @@ def update_database():
             print(f"Пропущено фрагменти через помилку: {e}")
 
 if __name__ == "__main__":
-    Ollama_manager.start_ollama()
+    ollama_manager.start_ollama()
     if not os.path.exists(DOCS_DIR):
         os.makedirs(DOCS_DIR)
     update_database()
-    Ollama_manager.stop_ollama()
+    ollama_manager.stop_ollama()
     print("Завершено.")
     input()

@@ -1,6 +1,6 @@
 ﻿import asyncio
 import os
-import Ollama_manager
+import ollama_manager
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
 from aiogram.enums import ParseMode
@@ -11,7 +11,7 @@ from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
 
-Ollama_manager.start_ollama()
+ollama_manager.start_ollama()
 load_dotenv()
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 if BOT_TOKEN == None:
@@ -149,6 +149,6 @@ if __name__ == "__main__":
         print(f"Критична помилка: {e}")
     finally:
         print("Завершення роботи Ollama...")
-        Ollama_manager.stop_ollama()
+        ollama_manager.stop_ollama()
         print("Роботу завершено.")
         input()

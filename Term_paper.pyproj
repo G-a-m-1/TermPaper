@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>14431045-a050-49f4-9bf9-c1f87035b422</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>Telegram_bot.py</StartupFile>
+    <StartupFile>scraper.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -24,7 +24,8 @@
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Add_to_DB.py" />
-    <Compile Include="Ollama_manager.py" />
+    <Compile Include="ollama_manager.py" />
+    <Compile Include="scraper.py" />
     <Compile Include="Telegram_bot.py" />
   </ItemGroup>
   <ItemGroup>
