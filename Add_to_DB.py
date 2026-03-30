@@ -95,5 +95,4 @@ if __name__ == "__main__":
         os.makedirs(DOCS_DIR)
     update_database()
     ollama_manager.stop_ollama()
-    print("Завершено.")
-    input()
+    input("\nРоботу завершено. Натисніть Enter для виходу...")
