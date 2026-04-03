@@ -4,7 +4,7 @@
     <SchemaVersion>2.0</SchemaVersion>
     <ProjectGuid>14431045-a050-49f4-9bf9-c1f87035b422</ProjectGuid>
     <ProjectHome>.</ProjectHome>
-    <StartupFile>ocr.py</StartupFile>
+    <StartupFile>pdf_metadate_changer.py</StartupFile>
     <SearchPath>
     </SearchPath>
     <WorkingDirectory>.</WorkingDirectory>
@@ -26,6 +26,7 @@
     <Compile Include="Add_to_DB.py" />
     <Compile Include="ocr.py" />
     <Compile Include="ollama_manager.py" />
+    <Compile Include="pdf_metadate_changer.py" />
     <Compile Include="scraper.py" />
     <Compile Include="Telegram_bot.py" />
   </ItemGroup>

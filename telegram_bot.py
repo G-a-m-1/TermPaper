@@ -1,13 +1,11 @@
-﻿import asyncio
-import os
+﻿import os
+import asyncio
 import ollama_manager
 from aiogram import Bot, Dispatcher, types
 from aiogram.filters import Command
-from aiogram.enums import ParseMode
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings, ChatOllama
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from dotenv import load_dotenv
 
@@ -23,7 +21,7 @@ DB_DIR = "./db"
 DEBUG_INFORMATION = True
 # Моделі
 EMBEDDINGS = OllamaEmbeddings(model="qwen3-embedding:0.6b", num_ctx = 2048) #"nomic-embed-text"
-LLM = ChatOllama(model="qwen3:4b", temperature=0.3, num_ctx = 15000)
+LLM = ChatOllama(model="qwen3.5:4b", temperature=0.3, num_ctx = 13000)
 
 MAX_MESSAGE_LENGTH = 1000  # Обмеження довжини запиту
 
@@ -124,7 +122,7 @@ async def handle_question(message: types.Message):
     except asyncio.TimeoutError:
         await status_msg.edit_text("Перевищено час очікування. Спробуйте ще раз.")
     except Exception as e:
-        print(f"Помилка: {e}")
+        print(f"\n[ПОМИЛКА] \n{e}")
         await status_msg.edit_text(f"Виникла технічна помилка. Спробуйте пізніше або перефразуйте питання.")
 
 async def main():
@@ -146,9 +144,8 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("Бот зупинений.")
     except Exception as e:
-        print(f"Критична помилка: {e}")
+        print(f"\n[ПОМИЛКА] Критична помилка: {e}")
     finally:
         print("Завершення роботи Ollama...")
         ollama_manager.stop_ollama()
-        print("Роботу завершено.")
-        input()
+        input("\nРоботу завершено. Натисніть Enter для виходу...")

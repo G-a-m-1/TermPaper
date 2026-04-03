@@ -60,7 +60,10 @@ def get_content_block(soup: BeautifulSoup) -> Tag | None:
         or soup.find('article')
         or soup.find('main')
     )
-    return result if isinstance(result, Tag) else None
+    if isinstance(result, Tag):
+        return result
+    else:
+        return None
 
 def download_file(url: str, save_dir: str, stats: dict) -> None:
     """Завантажує файл за прямим посиланням"""
@@ -79,17 +82,27 @@ def download_file(url: str, save_dir: str, stats: dict) -> None:
             stats['skipped'] += 1
             return
 
-        # Завантажую файл частинами щоб не тримати все в пам'яті
+        # Завантажую файл частинами
         response = requests.get(url, stream=True, timeout=15)
         response.raise_for_status()
         
         with open(file_path, 'wb') as f:
+            size = 0
             for chunk in response.iter_content(chunk_size=8192):
+                size += len(chunk)
                 f.write(chunk)
-        print(f"Завантажено: {filename}")
-        stats['downloaded'] += 1
+        
+        if size < 100:
+            print(f"Пропущено файл (занадто малий): {filename}")
+            os.remove(file_path)
+            stats['skipped'] += 1
+            return
+        else:
+            print(f"Завантажено: {filename}")
+
         if file_path.lower().endswith('.pdf'):
             add_source_url(file_path, url)
+        stats['downloaded'] += 1
     except Exception as e:
         print(f"Помилка завантаження {url}: {e}")
         stats['errors'] += 1
@@ -101,11 +114,10 @@ def scrape_page(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR,
     """
     Рекурсивно сканує сторінку і завантажує документи.
 
-    Args:
-        url:      Стартова URL-адреса.
-        save_dir: Папка для збереження файлів.
-        depth:    Глибина рекурсії.
-        visited:  Множина вже відвіданих URL (передається між рекурсіями).
+    url:      Стартова URL-адреса.
+    save_dir: Папка для збереження файлів.
+    depth:    Глибина рекурсії.
+    visited:  Множина вже відвіданих URL.
     """
     if visited is None:
         visited = set()
@@ -160,11 +172,23 @@ def scrape_page(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR,
 
         # Зберігаю сторінку як PDF тільки якщо файлів взагалі не знайдено
         if file_links_found == 0:
-            page_title = soup.title.string if soup.title else "Untitled"
+            if soup.title:
+                page_title = soup.title.string
+            else: 
+                page_title = "Untitled"
+
             page_text = content_area.get_text(separator='\n', strip=True)
-            safe_name = "".join(c for c in page_title if c.isalnum() or c in (' ', '_')).strip() # type: ignore
-            save_text_to_pdf(page_title, page_text, f"{safe_name}.pdf", save_dir, url) # type: ignore
-            stats['downloaded'] += 1
+            if len(page_text) < 50:
+                print(f"Пропущено сторінку (замало тексту): {url}")
+                stats['skipped'] += 1
+            else:
+                safe_name = "".join(c for c in page_title if c.isalnum() or c in (' ', '_', '-')).strip() # type: ignore
+                if not safe_name: 
+                    safe_name = "page_" + str(int(time.time()))
+                 
+                save_text_to_pdf(page_title, page_text, f"{safe_name}.pdf", save_dir, url) # type: ignore
+                stats['downloaded'] += 1
+            
 
     except Exception as e:
         print(f"Помилка при обробці сторінки {url}: {e}")
@@ -184,13 +208,14 @@ def print_summary(stats: dict, save_dir: str) -> None:
     print(f"Папка збереження   : {os.path.abspath(save_dir)}")
     print("=" * 80)
 
-def run(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR, depth: int = DEFAULT_DEPTH) -> None:
+def run(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR, depth: int = DEFAULT_DEPTH) -> dict:
     os.makedirs(save_dir, exist_ok=True) # Створюю папку, якщо її немає
     visited: set = set()
     stats: dict = {'downloaded': 0, 'skipped': 0, 'errors': 0, 'pages': 0}
     scrape_page(url, save_dir, depth, visited, stats)
     print_summary(stats, save_dir)
+    return stats
 
 if __name__ == "__main__":
     run()
-    input("\nНатисніть Enter для виходу...")
+    input("\nРоботу завершено. Натисніть Enter для виходу...")

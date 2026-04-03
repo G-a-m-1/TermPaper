@@ -1,6 +1,6 @@
 ﻿import os
 import ollama_manager
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
 from langchain_community.document_loaders import PyMuPDFLoader
@@ -29,7 +29,7 @@ def process_single_pdf(file_path):
         reader = PdfReader(file_path)
         source_url = (reader.metadata or {}).get("/Source", "")
 
-        # Додаю у metadata кожного документа
+        # Додаю джерело у metadata кожного документа
         if source_url:
             for doc in docs:
                 doc.metadata["source_url"] = source_url
@@ -72,7 +72,7 @@ def update_database():
 
     # Паралельне завантаження та розбиття на чанки
     all_raw_chunks = []
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as executor:
+    with ProcessPoolExecutor(max_workers=MAX_WORKERS) as executor:
         results = list(executor.map(process_single_pdf, files_to_process))
         for chunks in results:
             all_raw_chunks.extend(chunks)
