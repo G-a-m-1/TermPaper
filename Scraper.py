@@ -167,8 +167,10 @@ def scrape_page(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR,
                 file_links_found += 1
             elif urlparse(url).netloc == parsed_url.netloc and depth > 1:
                 # Знайшов посилання на той самий домен — йду глибше
-                scrape_page(full_url, save_dir=save_dir, depth=depth - 1, visited=visited, stats=stats)
-                time.sleep(0.5)
+                ext = os.path.splitext(parsed_url.path.lower())[1]
+                if ext == '' or ext in {'.html', '.htm'}:
+                    scrape_page(full_url, save_dir=save_dir, depth=depth - 1, visited=visited, stats=stats)
+                    time.sleep(0.5)
 
         # Зберігаю сторінку як PDF тільки якщо файлів взагалі не знайдено
         if file_links_found == 0:
@@ -216,6 +218,34 @@ def run(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR, depth: int = D
     print_summary(stats, save_dir)
     return stats
 
+def delete_save_dir(save_dir: str = DEFAULT_SAVE_DIR) -> None:
+    # Видалення скачених pdf файлів з вхідної папки
+    if not os.path.exists(save_dir):
+        return
+
+    for f in os.listdir(save_dir):
+        if f.lower().endswith(".pdf"):
+            full_path = os.path.join(save_dir, f)
+            try:
+                os.remove(full_path)
+            except Exception as e:
+                print(f"Не вдалося видалити {f}: {e}")
+
+
 if __name__ == "__main__":
-    run()
-    input("\nРоботу завершено. Натисніть Enter для виходу...")
+        print("\n\n\nРежими роботи:\n1. Завантажити файли з https://lnu.edu.ua/about/documents/\n2. Видалити завантажені файли\n0. Вийти з програми")
+        while True:
+            mode = input("\nВаш вибір: ")
+            if mode.isdigit() and int(mode) in [0, 1, 2]:
+                mode = int(mode)
+                break
+            print("Некоректний вибір. Спробуйте ще раз.")
+       
+        if mode == 0:
+            exit()
+        elif mode == 1:
+            run()
+            input("\nРоботу завершено. Натисніть Enter для виходу...")
+        elif mode == 2:
+            delete_save_dir()
+            input("\nРоботу завершено. Натисніть Enter для виходу...")

@@ -17,29 +17,28 @@ def file_selection()->str:
 
 def check_pdf_metadata() -> None:  
     file_path = file_selection()
+    print_metadata(file_path)
     while True:
-        print("\n\n\nРежими роботи:\n1. Вибрати інший файл\n2. Вивести всі метадані файлу\n3. Змінити метадані '/Source' файлу\n0. Вийти з програми")
+        print("\n\n\nРежими роботи:\n1. Вибрати інший файл\n2. Змінити метадані '/Source' файлу\n0. Вийти з програми")
         while True:
             mode = input("\nВаш вибір: ")
-            if mode.isdigit() and int(mode) in [0, 1, 2, 3]:
+            if mode.isdigit() and int(mode) in [0, 1, 2]:
                 mode = int(mode)
                 break
             print("Некоректний вибір. Спробуйте ще раз.")
-       
+        
         if mode == 0:
             exit()
         elif mode == 1:
             file_path = file_selection()
+            print_metadata(file_path)
             print("\n"*10)
         elif mode == 2:
-            mode_1(file_path)
-            print("\n"*10)
-        elif mode == 3:
             mode_2(file_path)
             print("\n"*10)
 
-def mode_1(file_path:str)-> None: 
-    print("Режими роботи 1. Виведення всіх метаданих файлу...")
+def print_metadata(file_path:str)-> None: 
+    print("\nВиведення всіх метаданих файлу...")
     try:    
         reader = PdfReader(file_path)
         meta = reader.metadata
@@ -50,12 +49,9 @@ def mode_1(file_path:str)-> None:
             for key, value in meta.items(): # Виводжу всі ключі
                 print(f"{key:20}: {value}")
         print(f"\nСторінок: {len(reader.pages)}")
-        input("\nНатисніть Enter для повернення...")
 
     except Exception as e:
-        print(f"\n[ПОМИЛКА]: {e}")
-        input("\nНатисніть Enter для повернення...")
-    
+        print(f"\n[ПОМИЛКА]: {e}") 
 
 def mode_2(file_path:str)-> None: 
     print("Режими роботи 2. Зміна метаданих '/Source' файлу...")
@@ -75,6 +71,21 @@ def mode_2(file_path:str)-> None:
     except Exception as e:
         print(f"[ПОМИЛКА] Не вдалося записати метадані: {e}")
         input("\nНатисніть Enter для повернення...")
+
+def change_file_methadata(file_path:str,source:str)->bool:
+    try:
+        reader = PdfReader(file_path, strict=False)
+        writer = PdfWriter()
+        writer.append(reader)
+        writer.add_metadata({"/Source": source})
+        tmp_path = file_path + ".tmp"
+        with open(tmp_path, 'wb') as f: # записую в тичасовий файл, щоб в разі помилки не втратити pdf
+            writer.write(f)
+        os.replace(tmp_path, file_path)
+        return True
+    except Exception as e:
+        print(f"[ПОМИЛКА] Не вдалося записати метадані: {e}")
+        return False
 
 if __name__ == "__main__":
     check_pdf_metadata()
