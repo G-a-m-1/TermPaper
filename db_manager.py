@@ -4,6 +4,7 @@ from queue import Queue
 from threading import Thread
 from langchain_chroma import Chroma
 from langchain_ollama import OllamaEmbeddings
+from langchain_core.documents import Document
 from langchain_community.document_loaders import PyMuPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from pypdf import PdfReader
@@ -11,8 +12,8 @@ from pypdf import PdfReader
 # Налаштування
 DB_DIR = "./db"
 DOCS_DIR = os.path.join("Data", "D_pdfs")
-EMBEDDINGS = OllamaEmbeddings(model="qwen3-embedding:0.6b") #"nomic-embed-text"
-CHUNK_SIZE = 2000
+EMBEDDINGS = OllamaEmbeddings(model="qwen3-embedding:0.6b") #"nomic-embed-text"для англійської,"bge-m3" не працює,"mxbai-embed-large:latest": мале вікно, "qwen3-embedding:0.6b"
+CHUNK_SIZE = 3000
 CHUNK_OVERLAP = 100
 TEXT_SPLITTER = RecursiveCharacterTextSplitter(
     chunk_size=CHUNK_SIZE, 
@@ -21,12 +22,14 @@ TEXT_SPLITTER = RecursiveCharacterTextSplitter(
 )
 BATCH_SIZE = 10
 
-
-def process_single_pdf(file_path):
+def _process_single_pdf(file_path):
     """Функція для обробки одного файлу"""
     try:
+        # Завантажую сторінки PDF як окремі документи
         loader = PyMuPDFLoader(file_path)
         docs = loader.load()
+
+        # Читаю метадані PDF щоб дістати source_url
         reader = PdfReader(file_path)
         source_url = (reader.metadata or {}).get("/Source", "")
 
@@ -34,27 +37,62 @@ def process_single_pdf(file_path):
         if source_url:
             for doc in docs:
                 doc.metadata["source_url"] = source_url
+        
+        # Об'єдную малі сторінки в один блок поки їх сумарний розмір менше CHUNK_SIZE
+        merged = []
+        current_text = ""
+        current_start = None
 
-        docs = TEXT_SPLITTER.split_documents(docs)
+        for doc in docs:
+            page_num = doc.metadata.get("page", 0)
+            text = doc.page_content.strip()
 
-        def clean_chunks(chunks:list)->list:
-            """ Підфункція для очищення чанків від непотрібних символів"""
-            cleaned = []
-            for d in chunks:
-                # Перебирає кожен символ тексту і залишає його якщо символ є ASCII або символ знаходиться в діапазоні кирилиці
-                d.page_content = ''.join(c for c in d.page_content if (c.isascii() and c >= ' ') or '\u0400' <= c <= '\u04FF')
-                # Перевірка на мінімальну довжину
-                if len(d.page_content.strip()) < 30:
-                    continue            
-                cleaned.append(d)
-            return cleaned
+            if not text:  # пропускаю пусті сторінки
+                continue
 
-        return clean_chunks(docs)
+            if current_start is None: # перша непуста сторінка
+                current_start = page_num
+                current_end = page_num
+
+            if len(current_text) + len(text) < CHUNK_SIZE: # якщо сторінка ще вміщується, то додаю до поточного блоку
+                current_text += " \n\n" + text
+                current_end = page_num
+            else: # якщо блок заповнений — зберігаю і створюю новий
+                if current_text:
+                    merged.append((current_text.strip(), current_start, current_end))
+                current_text = text
+                current_start = page_num
+                current_end = page_num
+
+        if current_text:
+            merged.append((current_text.strip(), current_start, current_end))
+
+        # Створюю документи з правильними метаданими
+
+        result_docs = []
+        for text, start, end in merged:
+            pages_label = f"{start+1}-{end+1}" if start != end else str(start+1)
+            doc = Document(
+                page_content=text,
+                metadata={
+                    "source": file_path,
+                    "pages": pages_label,
+                }
+            )
+            if source_url:
+                doc.metadata["source_url"] = source_url
+            result_docs.append(doc)
+
+        # якщо одна сторінка була більша за CHUNK_SIZE - розрізаю
+        docs = TEXT_SPLITTER.split_documents(result_docs)
+
+        return docs
+
     except Exception as e:
         print(f"Помилка при читанні {file_path}: {e}")
         return []
 
-def db_add_clean_chunks(vectorstore:Chroma, processed_docs:list) -> None:
+def _db_add_clean_chunks(vectorstore:Chroma, processed_docs:list) -> None:
     """Завантажує у базу даних передані документи"""
     print(f"    Створено {len(processed_docs)} фрагментів...")
     for i in range(0, len(processed_docs), BATCH_SIZE):
@@ -84,10 +122,10 @@ def update_db(vectorstore, docs_dir = DOCS_DIR):
     print(f"Знайдено {len(files_to_process)} нових файлів. Обробка...")
     
     
-    def producer(files:list, queue:Queue) -> None:
+    def producer(queue:Queue, files:list) -> None:
         """Функція для обробки багатьох файлів у потоці і передачі оброблених документів у чергу"""
         for i in range(len(files)):
-            chunks = process_single_pdf(files[i])
+            chunks = _process_single_pdf(files[i])
             queue.put((chunks,i))
         queue.put(None)  # сигнал що все оброблено
 
@@ -101,12 +139,12 @@ def update_db(vectorstore, docs_dir = DOCS_DIR):
             chunks, index = item
 
             print(f"[{index+1}/{len(files)}] Обробка {os.path.basename(files[index])}...")
-            db_add_clean_chunks(vectorstore, chunks)
+            _db_add_clean_chunks(vectorstore, chunks)
             print(f"    Успішно оброблено!")
 
 
     queue = Queue(maxsize=3)  # буфер на 3 файли
-    t_producer = Thread(target=producer, args=(files_to_process, queue))
+    t_producer = Thread(target=producer, args=(queue, files_to_process))
     t_consumer = Thread(target=consumer, args=(queue, files_to_process))
     t_producer.start()
     t_consumer.start()
@@ -116,8 +154,8 @@ def update_db(vectorstore, docs_dir = DOCS_DIR):
 
 def update_db_one_file(vectorstore, full_path:str) -> None:
     """Функція для оновлення бази даних з одного файлу"""
-    chunks = process_single_pdf(full_path)
-    db_add_clean_chunks(vectorstore, chunks)
+    chunks = _process_single_pdf(full_path)
+    _db_add_clean_chunks(vectorstore, chunks)
 
 def delete_db(vectorstore):
     """Функція для видалення бази даних"""

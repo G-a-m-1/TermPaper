@@ -12,7 +12,7 @@ DEFAULT_DEPTH = 3
 EXTENSIONS = {'.pdf'}
 FONT_PATH = "Fonts/LiberationSans-Regular.ttf"
 
-def save_text_to_pdf(title: str, text: str, filename: str, save_dir: str, url: str) -> None:
+def _save_text_to_pdf(title: str, text: str, filename: str, save_dir: str, url: str) -> None:
     """Створює PDF файл якщо на сторінці простий текст"""
     try:
         pdf = FPDF()
@@ -35,12 +35,12 @@ def save_text_to_pdf(title: str, text: str, filename: str, save_dir: str, url: s
         pdf.multi_cell(0, 7, text=text)
         
         pdf.output(os.path.join(save_dir, filename))
-        add_source_url(os.path.join(save_dir, filename), url)
+        _add_source_url(os.path.join(save_dir, filename), url)
         print(f"Створено PDF з тексту: {filename}")
     except Exception as e:
         print(f"Не вдалося створити PDF '{filename}': {e}")
 
-def add_source_url(file_path: str, url: str) -> None:
+def _add_source_url(file_path: str, url: str) -> None:
     """Записує URL джерела в метадані PDF"""
     try:
         reader = PdfReader(file_path, strict=False)
@@ -52,7 +52,7 @@ def add_source_url(file_path: str, url: str) -> None:
     except Exception as e:
         print(f"Не вдалося записати метадані ({os.path.basename(file_path)}): {e}")
 
-def get_content_block(soup: BeautifulSoup) -> Tag | None:
+def _get_content_block(soup: BeautifulSoup) -> Tag | None:
     """Шукає основний блок з контентом"""
     # Перебираю можливі контейнери — беру перший який знайду
     result = (
@@ -65,7 +65,7 @@ def get_content_block(soup: BeautifulSoup) -> Tag | None:
     else:
         return None
 
-def download_file(url: str, save_dir: str, stats: dict) -> None:
+def _download_file(url: str, save_dir: str, stats: dict) -> None:
     """Завантажує файл за прямим посиланням"""
     try:
         # Витягую ім'я файлу з URL
@@ -83,16 +83,16 @@ def download_file(url: str, save_dir: str, stats: dict) -> None:
             return
 
         # Завантажую файл частинами
-        response = requests.get(url, stream=True, timeout=15)
-        response.raise_for_status()
+        response = requests.get(url, stream=True, timeout=20)
+        response.raise_for_status() # кидає виняток якщо помилка
         
         with open(file_path, 'wb') as f:
             size = 0
-            for chunk in response.iter_content(chunk_size=8192):
+            for chunk in response.iter_content(chunk_size=100000):
                 size += len(chunk)
                 f.write(chunk)
         
-        if size < 100:
+        if size < 1000:
             print(f"Пропущено файл (занадто малий): {filename}")
             os.remove(file_path)
             stats['skipped'] += 1
@@ -101,13 +101,13 @@ def download_file(url: str, save_dir: str, stats: dict) -> None:
             print(f"Завантажено: {filename}")
 
         if file_path.lower().endswith('.pdf'):
-            add_source_url(file_path, url)
+            _add_source_url(file_path, url)
         stats['downloaded'] += 1
     except Exception as e:
         print(f"Помилка завантаження {url}: {e}")
         stats['errors'] += 1
 
-def scrape_page(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR,
+def _scrape_page(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR,
                 depth: int = DEFAULT_DEPTH, 
                 visited: set | None = None,
                 stats: dict | None = None) -> None:
@@ -145,7 +145,7 @@ def scrape_page(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR,
         soup = BeautifulSoup(response.text, 'html.parser')
         
         # Шукаю саме в контенті
-        content_area = get_content_block(soup)
+        content_area = _get_content_block(soup)
 
         if not content_area:
             print(f"Блок контенту не знайдено: {url}")
@@ -163,13 +163,13 @@ def scrape_page(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR,
 
             if any(parsed_url.path.lower().endswith(ext) for ext in EXTENSIONS):
                 # Знайшов файл — завантажую
-                download_file(full_url, save_dir, stats)
+                _download_file(full_url, save_dir, stats)
                 file_links_found += 1
             elif urlparse(url).netloc == parsed_url.netloc and depth > 1:
                 # Знайшов посилання на той самий домен — йду глибше
                 ext = os.path.splitext(parsed_url.path.lower())[1]
                 if ext == '' or ext in {'.html', '.htm'}:
-                    scrape_page(full_url, save_dir=save_dir, depth=depth - 1, visited=visited, stats=stats)
+                    _scrape_page(full_url, save_dir=save_dir, depth=depth - 1, visited=visited, stats=stats)
                     time.sleep(0.5)
 
         # Зберігаю сторінку як PDF тільки якщо файлів взагалі не знайдено
@@ -188,7 +188,7 @@ def scrape_page(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR,
                 if not safe_name: 
                     safe_name = "page_" + str(int(time.time()))
                  
-                save_text_to_pdf(page_title, page_text, f"{safe_name}.pdf", save_dir, url) # type: ignore
+                _save_text_to_pdf(page_title, page_text, f"{safe_name}.pdf", save_dir, url) # type: ignore
                 stats['downloaded'] += 1
             
 
@@ -197,7 +197,7 @@ def scrape_page(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR,
         stats['errors'] += 1
 
 
-def print_summary(stats: dict, save_dir: str) -> None:
+def _print_summary(stats: dict, save_dir: str) -> None:
     total = stats['downloaded'] + stats['skipped']
     print("\n\n" + "=" * 80)
     print("Сканування завершено")
@@ -214,8 +214,8 @@ def run(url: str = DEFAULT_URL, save_dir: str = DEFAULT_SAVE_DIR, depth: int = D
     os.makedirs(save_dir, exist_ok=True) # Створюю папку, якщо її немає
     visited: set = set()
     stats: dict = {'downloaded': 0, 'skipped': 0, 'errors': 0, 'pages': 0}
-    scrape_page(url, save_dir, depth, visited, stats)
-    print_summary(stats, save_dir)
+    _scrape_page(url, save_dir, depth, visited, stats)
+    _print_summary(stats, save_dir)
     return stats
 
 def delete_save_dir(save_dir: str = DEFAULT_SAVE_DIR) -> None:

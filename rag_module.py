@@ -9,7 +9,10 @@ from langchain_core.output_parsers import StrOutputParser
 # Налаштування
 DB_DIR = "./db"
 DEBUG_INFORMATION = True
-
+MODEL = "qwen3.5:2b"
+NUM_CTX = 30000
+K = 22
+THINK = False
 
 def initialize():
     """Ініціалізація Ollama, векторної бази та RAG-ланцюга."""
@@ -20,16 +23,15 @@ def initialize():
         exit()
  
     # Моделі
-    llm = ChatOllama(model="qwen3.5:4b", temperature=0.3, num_ctx=13000)
+    llm = ChatOllama(model=MODEL, temperature=0.3, num_ctx=NUM_CTX, reasoning=THINK)
  
     # Ініціалізація векторної бази
     vectorstore = db_manager.get_vectorstore()
-    retriever = vectorstore.as_retriever(search_kwargs={"k": 13})
+    retriever = vectorstore.as_retriever(search_kwargs={"k": K})
  
     # Шаблон промпту
-    template = """Ви помічник університету. Відповідайте повно на питання, використовуючи лише наданий контекст. 
-Якщо відповіді немає в контексті, скажіть: "На жаль, я не знайшов цієї інформації в базі даних університету".
-Відповідай виключно українською мовою.
+    template = """Ви помічник університету. Відповідайте повно на питання, використовуючи наданий контекст. Якщо відповіді немає в контексті, скажіть: "На жаль, я не знайшов цієї інформації в базі даних університету".
+Відповідай виключно українською мовою. Не використовуй Markdown.
 
 Контекст (кожен фрагмент містить посилання на джерело у форматі [Джерело: ..., сторінка ...]):
 {context}
@@ -37,9 +39,9 @@ def initialize():
 
 Питання користувача: {question}
 
-Після своєї відповіді обов'язково вкажи список лише використаних тобою джерел для надання відповіді (не більше трьох джерел) у форматі:
+Після своєї відповіді обов'язково вкажи список, який міститиме до трьох джерел найбільш підходящих до питання користувача і які ти найбільше використав для надання відповіді у форматі:
     Джерела інформації:
-- Посилання, сторінка X
+- Посилання, сторінк(а)/(и) X
 
 Відповідь:
 """
@@ -55,13 +57,13 @@ def format_docs(docs):
     parts = []
     for doc in docs:
         source_url = doc.metadata.get("source_url", "")
-        page = doc.metadata.get("page", "")
+        pages = doc.metadata.get("pages", "")
         
         header = ""
         if source_url:
             header += f"[Джерело: {source_url}"
-            if page != "":
-                header += f", сторінка {page + 1}"  # PyMuPDF рахує з 0
+            if pages:
+                header += f", сторінки {pages}"
             header += "]"
         
         parts.append(f"{header}\n{doc.page_content}" if header else doc.page_content)
@@ -77,8 +79,10 @@ def debug_docs(user_query: str, docs: list):
     print(f"Знайдено шматків: {len(docs)}")
     for i, doc in enumerate(docs):
         source = doc.metadata.get('source', 'Невідоме джерело')
+        source_url = doc.metadata.get('source_url', 'Невідоме джерело')
+        page = doc.metadata.get("pages", 'Невідома к-сть сторінок')
         preview = doc.page_content[:400].replace('\n', ' ')
-        print(f"\n[{i}] Файл:{source}\nКонтент:{preview}...")
+        print(f"\n[{i}]\tст.{page}\tсим.{len(doc.page_content)}\nФайл:{source} ({source_url})\nКонтент:{preview}...")
     print(f"{'-'*115}\n")
  
 def debug_response(response: str):

@@ -104,6 +104,60 @@ async def handle_document(message: types.Message, state: FSMContext):
     finally:
         await state.clear()
 
+scrape_lock = asyncio.Lock()
+@dp.message(Command("scrape_lnu"))
+async def scrape_lnu_cmd(message: types.Message):
+    """Обробка команди /scrape_lnu"""
+    if scrape_lock.locked():
+        await message.answer("Скрейпер вже працює")
+        return
+    
+    async with scrape_lock:
+        msg_scrape = await message.answer("Запуск скрейпера...")
+        try:
+            stats = await asyncio.to_thread(Scraper.run)
+            total = stats['downloaded'] + stats['skipped']
+            result = (
+                f"Сканування завершено\n\n"
+                f"Сторінок відвідано : {stats['pages']}\n"
+                f"Файлів завантажено : {stats['downloaded']}\n"
+                f"Пропущено (вже є)  : {stats['skipped']}\n"
+                f"Помилок            : {stats['errors']}\n"
+                f"Всього файлів      : {total}\n"
+            )
+
+            await msg_scrape.edit_text(result)
+
+            if stats['downloaded'] == 0:
+                return
+        
+            msg_ocr = await message.answer("Запуск ocr...")
+            stats = await asyncio.to_thread(ocr.process_pdfs)
+            total = stats['ocred'] + stats['skipped'] + stats['errors']
+            result = (
+                f"Оцифровка завершена\n\n"
+                f"Оцифровано : {stats['ocred']}\n"
+                f"Пропущено  : {stats['skipped']}\n"
+                f"Помилки    : {stats['errors']}\n"
+                f"Всього     : {total}\n"
+            )
+            await msg_ocr.edit_text(result)
+
+            if stats['ocred'] == 0:
+                return
+
+            msg_db = await message.answer("Запуск завантаження у базу...")
+            start = vectorstore._collection.count()
+            await asyncio.to_thread(db_manager.update_db, vectorstore)
+            end = vectorstore._collection.count()
+            dif = end - start
+            result = f"Завантаження у базу завершено. Створено {dif} нових фрагментів."
+            await msg_db.edit_text(result)
+
+
+        except Exception as e:
+            print(f"[ПОМИЛКА] {e}")
+            await message.answer("Сталась помилка. Спробуйте знову пізніше")
 
 user_locks: dict[int, asyncio.Lock] = {}
 @dp.message()
@@ -164,7 +218,8 @@ async def setup_commands():
     
     # команди для адмінів
     admin_commands = user_commands + [
-        types.BotCommand(command="add_file", description="Додати файл у базу"),
+        types.BotCommand(command="add_file", description="Додати файл у базу даних"),
+        types.BotCommand(command="scrape_lnu", description="Провірити на наявність нових документів")
     ]
 
     # встановлюю звичайне меню для всіх

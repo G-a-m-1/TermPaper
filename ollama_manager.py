@@ -2,6 +2,8 @@
 import time
 import httpx  
 import os
+from dotenv import load_dotenv
+
 
 def start_ollama(hidden = False):
     """Перевіряє, чи працює Ollama, і запускає її, якщо ні."""
@@ -23,6 +25,12 @@ def start_ollama(hidden = False):
     print("Запуск Ollama...")
     kwargs = {}
 
+    load_dotenv()
+    env = os.environ.copy()
+    models_path = os.getenv("OLLAMA_MODELS")
+    if models_path:
+        env["OLLAMA_MODELS"] = models_path
+
     if hidden:
         kwargs["stdout"] = subprocess.DEVNULL
         kwargs["stderr"] = subprocess.DEVNULL
@@ -35,7 +43,7 @@ def start_ollama(hidden = False):
         if os.name == "nt":
             kwargs["creationflags"] = subprocess.CREATE_NEW_CONSOLE
 
-    subprocess.Popen(["ollama", "serve"], **kwargs)
+    subprocess.Popen(["ollama", "serve"], env=env, **kwargs)
         
     # Чекаю, поки сервер почне відповідати (макс 30 секунд)
     for _ in range(30):
@@ -70,3 +78,24 @@ def stop_ollama():
         print("Ollama успішно вимкнена.")
     except Exception as e:
         print(f"[ПОМИЛКА] Не вдалося вимкнути Ollama:\n{e}")
+
+
+if __name__ == "__main__":
+    while True:
+        print("Режими роботи:\n1. Запустити ollama\n2. Вимкнути ollama\n0. Вийти з програми")
+        while True:
+            mode = input("\nВаш вибір: ")
+            if mode.isdigit() and int(mode) in [0, 1, 2]:
+                mode = int(mode)
+                break
+            print("Некоректний вибір. Спробуйте ще раз.")
+        
+        if mode == 0:
+            input("\nРоботу завершено. Натисніть Enter для виходу...")
+            exit()
+        elif mode == 1:
+            start_ollama()
+            print("\n"*10)
+        elif mode == 2:
+            stop_ollama()
+            print("\n"*10)
