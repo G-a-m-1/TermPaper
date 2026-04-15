@@ -2,7 +2,6 @@
 import asyncio
 import rag_module
 import ollama_manager
-import pdf_metadate_changer
 import db_manager
 import Scraper
 import ocr
@@ -10,6 +9,8 @@ from aiogram import Bot, Dispatcher, types, F
 from aiogram.filters import Command, Filter, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.client.default import DefaultBotProperties
+from aiogram.enums import ParseMode
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -19,6 +20,15 @@ if BOT_TOKEN == None:
     print(f"[ПОМИЛКА] BOT_TOKEN не знайдено!")
     input("\nРоботу завершено. Натисніть Enter для виходу...")
     exit()
+
+# Налаштування бота
+bot = Bot(token=BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.MARKDOWN,
+   link_preview_is_disabled=True))
+dp = Dispatcher()
+
+
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY")
+
 SOURCE_DIR = os.path.join("Data", "A_pdfs", "FileFromOtherSource")
 ADMIN_IDS = set(
     int(i) for i in os.getenv("ADMIN_IDS", "").split(",") if i.strip().isdigit()
@@ -27,11 +37,6 @@ MAX_MESSAGE_LENGTH = 1000  # Обмеження довжини запиту
 
 # Ініціалізація RAG-модуля
 vectorstore, retriever, rag_chain = rag_module.initialize()
-
-# Налаштування бота
-bot = Bot(token=BOT_TOKEN)
-dp = Dispatcher()
-
 
 class AdminFilter(Filter):
     async def __call__(self, message: types.Message) -> bool:
@@ -105,7 +110,7 @@ async def handle_document(message: types.Message, state: FSMContext):
         await state.clear()
 
 scrape_lock = asyncio.Lock()
-@dp.message(Command("scrape_lnu"))
+@dp.message(Command("scrape_lnu"), AdminFilter())
 async def scrape_lnu_cmd(message: types.Message):
     """Обробка команди /scrape_lnu"""
     if scrape_lock.locked():
@@ -154,10 +159,10 @@ async def scrape_lnu_cmd(message: types.Message):
             result = f"Завантаження у базу завершено. Створено {dif} нових фрагментів."
             await msg_db.edit_text(result)
 
-
         except Exception as e:
             print(f"[ПОМИЛКА] {e}")
             await message.answer("Сталась помилка. Спробуйте знову пізніше")
+
 
 user_locks: dict[int, asyncio.Lock] = {}
 @dp.message()
@@ -199,7 +204,10 @@ async def handle_question(message: types.Message):
             # Генерація відповіді через модель
             response = await asyncio.wait_for(asyncio.to_thread(rag_chain.invoke, {"context": context_text, "question": user_query}), timeout=600.0)
             rag_module.debug_response(response)
-            await status_msg.edit_text(response[:4096]) # 4096 - ліміт Telegram
+            if len(response) > 4096: # 4096 - ліміт Telegram
+                await status_msg.edit_text(response[:4090] + "\n[...]")
+            else:
+                await status_msg.edit_text(response) 
         
         except asyncio.TimeoutError:
             await status_msg.edit_text("Перевищено час очікування. Спробуйте ще раз.")
@@ -233,6 +241,7 @@ async def setup_commands():
         )
 
 async def main():
+    os.makedirs(SOURCE_DIR, exist_ok=True)
     await setup_commands()
     print(f"База даних: {rag_module.DB_DIR}")
     print(f"Документів у базі: {vectorstore._collection.count()}")

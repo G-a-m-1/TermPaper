@@ -113,7 +113,7 @@ def update_db(vectorstore, docs_dir = DOCS_DIR):
             full_path = os.path.join(docs_dir, f)
             result = vectorstore.get(where={"source": full_path}, limit=1) # Перевірка чи вже є у базі
             if not result['ids']:
-                files_to_process.append(full_path) # Якщо файлу нема - додаєм
+                files_to_process.append(full_path) # Якщо файлу нема - додаю
 
     if not files_to_process:
         print("Нових документів не знайдено.")
